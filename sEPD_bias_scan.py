@@ -1,3 +1,5 @@
+#! /usr/bin/python3
+
 import datetime
 import os
 import subprocess
@@ -242,7 +244,7 @@ def get_trim_voltages() -> dict:
             voltages = response.rstrip().lstrip().replace('\r', ' ').split('\n')
             logging.debug(f'Voltages: {voltages}')
             for i, voltage in enumerate(voltages[:-1]):
-                trim_voltages[side][ib][i] = voltage
+                trim_voltages[side][ib][i] = int(voltage)
     return trim_voltages
 
 
