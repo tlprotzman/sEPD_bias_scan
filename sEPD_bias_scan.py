@@ -7,15 +7,7 @@ import json
 import telnetlib
 import argparse
 
-BIAS_CONTROL_FOLDER = '/Users/tristan/sphenix/sEPD/bias_scan/BiasControl'
-BIAS_MAPS_FOLDER = '/Users/tristan/sphenix/sEPD/bias_scan/bias_maps'
-SEB = 'seb20'
-VGTM = '8'
-TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-
-NORTH_IP = '10.20.34.98'
-SOUTH_IP = '10.20.34.99'
-PORT = 9760
+import config
 
 def generate_bias_map(voltage: float) -> str:
     '''
@@ -31,7 +23,7 @@ def generate_bias_map(voltage: float) -> str:
     lines = []
     with open('sEPD_HVSet_template.txt', 'r') as f:
         lines = f.readlines()
-    file_name = os.path.join(BIAS_MAPS_FOLDER, f'sEPD_HVSet_{voltage}.txt')
+    file_name = os.path.join(config.BIAS_MAPS_FOLDER, f'sEPD_HVSet_{voltage}.txt')
     with open(file_name, 'w') as f:
         for line in lines:
             f.write(line.format(voltage))
@@ -48,9 +40,9 @@ def load_bias_map(file_name: str) -> None:
         None
     '''
     # move the file to the bias control folder
-    os.rename(file_name, os.path.join(BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'))
+    os.rename(file_name, os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'))
     # load the bias map
-    subprocess.run(['bash', os.path.join(BIAS_CONTROL_FOLDER, 'sEPD_Init.sh')])
+    subprocess.run(['bash', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_Init.sh')])
     # Wait for bias supply to stabilize
     time.sleep(1)
 
@@ -72,7 +64,7 @@ def record_events(n_events: int, test=True) -> dict:
         run_info['num_events'] = n_events
         return run_info
 
-    subprocess.run(['jseb2client', 'init', SEB])
+    subprocess.run(['jseb2client', 'init', config.SEB])
     
     # Start run 
     print('Starting run')
@@ -80,14 +72,14 @@ def record_events(n_events: int, test=True) -> dict:
     run_number = int(run_number)
     run_info['run_number'] = run_number
 
-    subprocess.run(['gl1_gtm_client', 'gtm_startrun', VGTM])
+    subprocess.run(['gl1_gtm_client', 'gtm_startrun', config.VGTM])
     # Run until desired number of events are collected
     while (int(subprocess.check_output(['rcdaq_client', 'daq_get_numberevents'])) < n_events):
         time.sleep(5)
     
     # Stop run
     print('Stopping run')
-    subprocess.run(['gl1_gtm_client', 'gtm_stop', VGTM])
+    subprocess.run(['gl1_gtm_client', 'gtm_stop', config.VGTM])
     subprocess.run(['rcdaq_client', 'daq_end'])
     time.sleep(0.5)
     file_name = subprocess.check_output(['rcdaq_client', 'daq_get_lastfilename']).decode()
@@ -107,9 +99,9 @@ def run_scans(voltages: list) -> dict:
         dict - Information about the scans.
     '''
     # Backup the current bias map with timestamp
-    backup_file_name = f'sEPD_HVSet_backup_{TIMESTAMP}.txt'
+    backup_file_name = f'sEPD_HVSet_backup_{config.TIMESTAMP}.txt'
     print(f'Backing up current bias map to {backup_file_name}')
-    subprocess.run(['cp', os.path.join(BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'), os.path.join(BIAS_MAPS_FOLDER, backup_file_name)])
+    subprocess.run(['cp', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'), os.path.join(config.BIAS_MAPS_FOLDER, backup_file_name)])
 
     scan_info = {}
     for voltage in voltages:
@@ -119,12 +111,12 @@ def run_scans(voltages: list) -> dict:
         scan_info[voltage] = record_events(1000, test=True)
 
     # Save scan info to JSON file
-    with open(f'run_info/scan_info_{TIMESTAMP}.json', 'w') as f:
+    with open(f'run_info/scan_info_{config.TIMESTAMP}.json', 'w') as f:
         json.dump(scan_info, f, indent=4)
 
     # Restore the backup bias map, keeping a copy
     print(f'Restoring backup bias map')
-    subprocess.run(['cp', os.path.join(BIAS_MAPS_FOLDER, backup_file_name), os.path.join(BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt')])
+    subprocess.run(['cp', os.path.join(config.BIAS_MAPS_FOLDER, backup_file_name), os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt')])
 
     return scan_info
 
@@ -225,8 +217,8 @@ def get_trim_voltages(test=True) -> dict:
     north_tn = None
     south_tn = None
     if not test:
-        north_tn = telnetlib.Telnet(NORTH_IP, PORT)
-        south_tn = telnetlib.Telnet(SOUTH_IP, PORT)
+        north_tn = telnetlib.Telnet(config.NORTH_IP, config.PORT)
+        south_tn = telnetlib.Telnet(config.SOUTH_IP, config.PORT)
 
     trim_voltages = {}
     cmd_prefix = '$GR'
@@ -307,17 +299,17 @@ def main(argv):
     args = parser.parse_args()
 
     # make all needed folders
-    os.makedirs(BIAS_MAPS_FOLDER, exist_ok=True)
+    os.makedirs(config.BIAS_MAPS_FOLDER, exist_ok=True)
     os.makedirs('run_info', exist_ok=True)
 
     if args.scan:
         # Save current trim voltages
         original_trim_voltages = get_trim_voltages(test=True)
-        write_trim_voltage_file(os.path.join(BIAS_MAPS_FOLDER, f'trim_voltages_{TIMESTAMP}.txt'), original_trim_voltages)
+        write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
         
         # Generate 0 trim map file
-        generate_empty_trim_file(os.path.join(BIAS_MAPS_FOLDER, 'trim_zero.txt'))
-        set_trim_voltages(read_trim_voltage_file(os.path.join(BIAS_MAPS_FOLDER, 'trim_zero.txt')), test=True)
+        generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
+        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), test=True)
         run_scans(args.scan)
 
         # Restore original trim voltages
@@ -325,10 +317,10 @@ def main(argv):
 
     elif args.generate_demo:
         print('Generating demo trim voltage file')
-        generate_empty_trim_file(os.path.join(BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
+        generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
 
     elif args.set:
-        trim_voltages = read_trim_voltage_file(os.path.join(BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
+        trim_voltages = read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
         set_trim_voltages(trim_voltages, test=True)
 
     elif args.get:
