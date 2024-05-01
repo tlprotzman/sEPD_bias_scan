@@ -47,7 +47,7 @@ def load_bias_map(file_name: str) -> None:
     # Wait for bias supply to stabilize
     time.sleep(1)
 
-def record_events(n_events: int, test=True) -> dict:
+def record_events(n_events: int, ) -> dict:
     '''
     Take a run with n events.
 
@@ -59,7 +59,7 @@ def record_events(n_events: int, test=True) -> dict:
         dict - Information about the run.
     '''
     run_info = {}
-    if test:
+    if config.SIMULATE:
         run_info['run_number'] = 1
         run_info['file_path'] = 'test_file_path'
         run_info['num_events'] = n_events
@@ -109,7 +109,7 @@ def run_scans(voltages: list) -> dict:
         voltage = float(voltage)
         bias_map = generate_bias_map(voltage)
         load_bias_map(bias_map)
-        scan_info[voltage] = record_events(1000, test=config.SIMULATE)
+        scan_info[voltage] = record_events(1000)
 
     # Save scan info to JSON file
     with open(f'run_info/scan_info_{config.TIMESTAMP}.json', 'w') as f:
@@ -207,7 +207,7 @@ def generate_empty_trim_file(file_name: str) -> None:
                 trim_voltages[side][ib][i] = 0
     write_trim_voltage_file(file_name, trim_voltages)
 
-def get_trim_voltages(test=True) -> dict:
+def get_trim_voltages() -> dict:
     ''' 
     Get the currently loaded trip voltages from the bias control system.
 
@@ -219,7 +219,7 @@ def get_trim_voltages(test=True) -> dict:
     '''
     north_tn = None
     south_tn = None
-    if not test:
+    if not config.SIMULATE:
         north_tn = telnetlib.Telnet(config.NORTH_IP, config.PORT)
         south_tn = telnetlib.Telnet(config.SOUTH_IP, config.PORT)
 
@@ -232,7 +232,7 @@ def get_trim_voltages(test=True) -> dict:
             # Send command to get the trim voltage
             cmd = '%s%01d\n\r' % (cmd_prefix, ib)
             # Read the response
-            if test:
+            if config.SIMULATE:
                 response = ' '.join(['0\n' for i in range(64)])
             else:
                 if side == 'N':
@@ -246,7 +246,7 @@ def get_trim_voltages(test=True) -> dict:
     return trim_voltages
 
 
-def set_trim_voltages(trim_map: dict, test=True) -> bool:
+def set_trim_voltages(trim_map: dict, ) -> bool:
     '''
     Set the trim voltages on the bias control system.
 
@@ -275,7 +275,7 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
             north_cmd_list.append('%s%01d%02d%s\n\r' % (cmd_prefix, ib, i, str(north_val)))
             south_cmd_list.append('%s%01d%02d%s\n\r' % (cmd_prefix, ib, i, str(south_val)))
     
-    if test:
+    if config.SIMULATE:
         logging.info('Generated command list')
         logging.info('North:')
         logging.info(north_cmd_list)
@@ -298,7 +298,7 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
             for i in range(64):
                 if trim_map[side][ib][i] != new_trim_voltages[side][ib][i]:
                     match = False
-                    logging.warning(f'Trim voltage mismatch: Side={side}, IB={ib}, I={i}, Old={trim_map[side][ib][i]}, New={new_trim_voltages[side][ib][i]}')
+                    logging.warning(f'Trim voltage mismatch: Side={side}, IB={ib}, I={i}, Request={trim_map[side][ib][i]}, Readback={new_trim_voltages[side][ib][i]}')
     return match
 
 
@@ -322,16 +322,16 @@ def main(argv):
 
     if args.scan:
         # Save current trim voltages
-        original_trim_voltages = get_trim_voltages(test=config.SIMULATE)
+        original_trim_voltages = get_trim_voltages()
         write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
         
         # Generate 0 trim map file
         generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
-        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), test=config.SIMULATE)
+        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), )
         run_scans(args.scan)
 
         # Restore original trim voltages
-        set_trim_voltages(original_trim_voltages, test=config.SIMULATE)
+        set_trim_voltages(original_trim_voltages)
 
     elif args.generate_demo:
         logging.info('Generating demo trim voltage file')
@@ -339,10 +339,10 @@ def main(argv):
 
     elif args.set:
         trim_voltages = read_trim_voltage_file(args.set)
-        set_trim_voltages(trim_voltages, test=config.SIMULATE)
+        set_trim_voltages(trim_voltages)
 
     elif args.get:
-        trim_voltages = get_trim_voltages(test=config.SIMULATE)
+        trim_voltages = get_trim_voltages()
         write_trim_voltage_file(args.get, trim_voltages)
 
 if __name__ == '__main__':
