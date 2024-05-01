@@ -283,12 +283,12 @@ def set_trim_voltages(trim_map: dict, ) -> bool:
         logging.info(south_cmd_list)
         return True
     
-    north_tn = telnetlib.Telnet(config.NORTH_IP, config.PORT)
-    south_tn = telnetlib.Telnet(config.SOUTH_IP, config.PORT)
-    for cmd in north_cmd_list:
-        send_command(north_tn, cmd)
-    for cmd in south_cmd_list:
-        send_command(south_tn, cmd)
+    with telnetlib.Telnet(config.NORTH_IP, config.PORT) as north_tn:
+        for cmd in north_cmd_list:
+            send_command(north_tn, cmd)
+    with telnetlib.Telnet(config.SOUTH_IP, config.PORT) as south_tn:
+        for cmd in south_cmd_list:
+            send_command(south_tn, cmd)
 
     # Readback the trim voltages to verify they were set correctly
     new_trim_voltages = get_trim_voltages()
