@@ -302,6 +302,7 @@ def main(argv):
     parser.add_argument('--scan', metavar='v1 v2', type=float, nargs='*', default=[], help='Run bias scan for voltages v1 v2 ... vn')
     parser.add_argument('--generate_demo', action='store_true', help='Generate a demo trim voltage file')
     parser.add_argument('--set', metavar='file_name', type=str, help='Set the trim voltages to the values in the specified trim voltage file')
+    parser.add_argument('--get', metavar='output_file_name', type=str, help='Stores the currently loaded trim voltages in the specified file')
 
     args = parser.parse_args()
 
@@ -329,6 +330,10 @@ def main(argv):
     elif args.set:
         trim_voltages = read_trim_voltage_file(os.path.join(BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
         set_trim_voltages(trim_voltages, test=True)
+
+    elif args.get:
+        trim_voltages = get_trim_voltages(test=True)
+        write_trim_voltage_file(args.get, trim_voltages)
 
 if __name__ == '__main__':
     main(sys.argv)
