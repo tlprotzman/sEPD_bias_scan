@@ -6,6 +6,7 @@ import time
 import json
 import telnetlib
 import argparse
+import logging
 
 import config
 
@@ -67,7 +68,7 @@ def record_events(n_events: int, test=True) -> dict:
     subprocess.run(['jseb2client', 'init', config.SEB])
     
     # Start run 
-    print('Starting run')
+    logging.info('Starting run')
     run_number = subprocess.check_output(['rcdaq_client', 'daq_begin']).split()[3]
     run_number = int(run_number)
     run_info['run_number'] = run_number
@@ -78,7 +79,7 @@ def record_events(n_events: int, test=True) -> dict:
         time.sleep(5)
     
     # Stop run
-    print('Stopping run')
+    logging.info('Stopping run')
     subprocess.run(['gl1_gtm_client', 'gtm_stop', config.VGTM])
     subprocess.run(['rcdaq_client', 'daq_end'])
     time.sleep(0.5)
@@ -100,7 +101,7 @@ def run_scans(voltages: list) -> dict:
     '''
     # Backup the current bias map with timestamp
     backup_file_name = f'sEPD_HVSet_backup_{config.TIMESTAMP}.txt'
-    print(f'Backing up current bias map to {backup_file_name}')
+    logging.info(f'Backing up current bias map to {backup_file_name}')
     subprocess.run(['cp', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'), os.path.join(config.BIAS_MAPS_FOLDER, backup_file_name)])
 
     scan_info = {}
@@ -115,7 +116,7 @@ def run_scans(voltages: list) -> dict:
         json.dump(scan_info, f, indent=4)
 
     # Restore the backup bias map, keeping a copy
-    print(f'Restoring backup bias map')
+    logging.info(f'Restoring backup bias map')
     subprocess.run(['cp', os.path.join(config.BIAS_MAPS_FOLDER, backup_file_name), os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt')])
 
     return scan_info
@@ -131,8 +132,10 @@ def send_command(tn: telnetlib.Telnet, command: str) -> str:
     Returns:
         str - The response from the bias control system.
     '''
+    logging.debug(f'Sending command: {command}')
     tn.write(command.encode('ascii') + b'\n')
-    response = tn.read_until(b'\n').decode('ascii')
+    response = tn.read_until(b'>').decode('ascii')
+    logging.debug(f'Response: {response}')
     return response
 
 def read_trim_voltage_file(file_name: str) -> dict:
@@ -148,7 +151,7 @@ def read_trim_voltage_file(file_name: str) -> dict:
     trim_voltages = {}
     # check if the file exists
     if not os.path.exists(file_name):
-        print(f'Error: File {file_name} does not exist')
+        logging.error(f'Error: File {file_name} does not exist')
         sys.exit(1)
     with open(file_name, 'r') as f:
         lines = f.readlines()
@@ -229,7 +232,6 @@ def get_trim_voltages(test=True) -> dict:
             for i in range(32):
                 # Send command to get the trim voltage
                 cmd = '%s%01d%02d\n\r' % (cmd_prefix, ib, i)
-                print(cmd)
                 # Read the response
                 if test:
                     response = 0
@@ -262,11 +264,11 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
             south_cmd_list.append('%s%01d%02d%02d\n\r' % (cmd_prefix, ib, i, trim_map['S'][ib][i]))
     
     if test:
-        print('Generated command list')
-        print('North:')
-        print(north_cmd_list)
-        print('South:')
-        print(south_cmd_list)
+        logging.info('Generated command list')
+        logging.info('North:')
+        logging.info(north_cmd_list)
+        logging.info('South:')
+        logging.info(south_cmd_list)
         return True
     
     north_tn = telnetlib.Telnet('NORTH_IP', 'PORT')
@@ -284,7 +286,7 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
             for i in range(32):
                 if trim_map[side][ib][i] != new_trim_voltages[side][ib][i]:
                     match = False
-                    print(f'Trim voltage mismatch: Side={side}, IB={ib}, I={i}, Old={trim_map[side][ib][i]}, New={new_trim_voltages[side][ib][i]}')
+                    logging.warning(f'Trim voltage mismatch: Side={side}, IB={ib}, I={i}, Old={trim_map[side][ib][i]}, New={new_trim_voltages[side][ib][i]}')
     return match
 
 
@@ -295,6 +297,10 @@ def main(argv):
     parser.add_argument('--generate_demo', action='store_true', help='Generate a demo trim voltage file')
     parser.add_argument('--set', metavar='file_name', type=str, help='Set the trim voltages to the values in the specified trim voltage file')
     parser.add_argument('--get', metavar='output_file_name', type=str, help='Stores the currently loaded trim voltages in the specified file')
+
+    # Add logging options
+    parser.add_argument('--log', metavar='log_level', type=str, default='INFO', help='Set the logging level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
+    logging.basicConfig(level=getattr(logging, args.log))
 
     args = parser.parse_args()
 
@@ -316,7 +322,7 @@ def main(argv):
         set_trim_voltages(original_trim_voltages, test=True)
 
     elif args.generate_demo:
-        print('Generating demo trim voltage file')
+        logging.info('Generating demo trim voltage file')
         generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
 
     elif args.set:
