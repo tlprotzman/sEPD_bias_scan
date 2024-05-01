@@ -61,6 +61,7 @@ def record_events(n_events: int, ) -> dict:
         dict - Information about the run.
     '''
     run_info = {}
+    return run_info # SHORT CIRCUIT EVERYTHING.  No longer running in this mode
     if config.SIMULATE:
         run_info['run_number'] = 1
         run_info['file_path'] = 'test_file_path'
