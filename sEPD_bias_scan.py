@@ -242,7 +242,7 @@ def get_trim_voltages(test=True) -> dict:
             logging.debug(f'Response: {response}')
             voltages = response.rstrip().lstrip().replace('\r', ' ').split('\n')
             logging.debug(f'Voltages: {voltages}')
-            for i, voltage in enumerate(voltages):
+            for i, voltage in enumerate(voltages[:-1]):
                 trim_voltages[side][ib][i] = voltage
     return trim_voltages
 
