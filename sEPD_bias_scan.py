@@ -308,8 +308,10 @@ def set_trim_voltages(trim_map: dict, ) -> bool:
 def main(argv):
     parser = argparse.ArgumentParser(description='sEPD Bias Scan')
     # parser.add_argument('--mode', metavar='mode', type=str, help='mode of operation' , choices=['scan', 'generate_demo', 'set'], required=True)
-    parser.add_argument('--scan', metavar='v1 v2', type=float, nargs='*', default=[], help='Run bias scan for voltages v1 v2 ... vn')
+    # parser.add_argument('--scan', metavar='v1 v2', type=float, nargs='*', default=[], help='Run bias scan for voltages v1 v2 ... vn')
     parser.add_argument('--generate_demo', action='store_true', help='Generate a demo trim voltage file')
+    parser.add_argument('--set_base', metavar='voltage', type=float, help='Set the base voltage for the bias scan')
+    parser.add_argument('--backup', action='store_true', help='Backup the current bias map')
     parser.add_argument('--set', metavar='file_name', type=str, help='Set the trim voltages to the values in the specified trim voltage file')
     parser.add_argument('--get', metavar='output_file_name', type=str, help='Stores the currently loaded trim voltages in the specified file')
 
@@ -323,22 +325,40 @@ def main(argv):
     os.makedirs(config.BIAS_MAPS_FOLDER, exist_ok=True)
     os.makedirs('run_info', exist_ok=True)
 
-    if args.scan:
-        # Save current trim voltages
+    if args.backup:
+        # backup bias and trim
+        subprocess.run(['cp', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'), os.path.join(config.BIAS_MAPS_FOLDER, f'sEPD_HVSet_backup_{config.TIMESTAMP}.txt')])
         original_trim_voltages = get_trim_voltages()
         write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
+        logging.info('Backup complete: timestamp {config.TIMESTAMP}')
+
+
+    # if args.scan:
+    #     # Save current trim voltages
+    #     original_trim_voltages = get_trim_voltages()
+    #     write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
         
-        # Generate 0 trim map file
-        generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
-        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), )
-        run_scans(args.scan)
+    #     # Generate 0 trim map file
+    #     generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
+    #     set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), )
+    #     run_scans(args.scan)
 
-        # Restore original trim voltages
-        set_trim_voltages(original_trim_voltages)
+    #     # Restore original trim voltages
+    #     set_trim_voltages(original_trim_voltages)
 
-    elif args.generate_demo:
+    if args.generate_demo:
         logging.info('Generating demo trim voltage file')
         generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
+
+    elif args.set_base:
+        # Set a bias voltage
+        base_voltage = args.set_base
+        bias_map = generate_bias_map(base_voltage)
+        load_bias_map(bias_map)
+
+        # Set the trim voltages to 0
+        generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
+        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')))
 
     elif args.set:
         trim_voltages = read_trim_voltage_file(args.set)
