@@ -203,7 +203,7 @@ def generate_empty_trim_file(file_name: str) -> None:
         trim_voltages[side] = {}
         for ib in range(6):
             trim_voltages[side][ib] = {}
-            for i in range(32):
+            for i in range(64):
                 trim_voltages[side][ib][i] = 0
     write_trim_voltage_file(file_name, trim_voltages)
 
@@ -233,13 +233,12 @@ def get_trim_voltages(test=True) -> dict:
             cmd = '%s%01d\n\r' % (cmd_prefix, ib)
             # Read the response
             if test:
-                response = ' '.join(['0\n' for i in range(32)])
+                response = ' '.join(['0\n' for i in range(64)])
             else:
                 if side == 'N':
                     response = send_command(north_tn, cmd)
                 else:
                     response = send_command(south_tn, cmd)
-            logging.debug(f'Response: {response}')
             voltages = response.rstrip().lstrip().replace('\r', ' ').split('\n')
             logging.debug(f'Voltages: {voltages}')
             for i, voltage in enumerate(voltages[:-1]):
@@ -262,7 +261,7 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
     north_cmd_list = []
     south_cmd_list = []
     for ib in range(6):
-        for i in range(32):
+        for i in range(64):
             north_val = trim_map['N'][ib][i]
             south_val = trim_map['S'][ib][i]
 
@@ -296,7 +295,7 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
     match = True
     for side in ['N', 'S']:
         for ib in range(6):
-            for i in range(32):
+            for i in range(64):
                 if trim_map[side][ib][i] != new_trim_voltages[side][ib][i]:
                     match = False
                     logging.warning(f'Trim voltage mismatch: Side={side}, IB={ib}, I={i}, Old={trim_map[side][ib][i]}, New={new_trim_voltages[side][ib][i]}')
