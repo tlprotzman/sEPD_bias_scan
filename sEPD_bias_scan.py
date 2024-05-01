@@ -284,8 +284,8 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
         logging.info(south_cmd_list)
         return True
     
-    north_tn = telnetlib.Telnet('NORTH_IP', 'PORT')
-    south_tn = telnetlib.Telnet('SOUTH_IP', 'PORT')
+    north_tn = telnetlib.Telnet(config.NORTH_IP, config.PORT)
+    south_tn = telnetlib.Telnet(config.SOUTH_IP, config.PORT)
     for cmd in north_cmd_list:
         send_command(north_tn, cmd)
     for cmd in south_cmd_list:
@@ -339,7 +339,7 @@ def main(argv):
         generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
 
     elif args.set:
-        trim_voltages = read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
+        trim_voltages = read_trim_voltage_file(args.set)
         set_trim_voltages(trim_voltages, test=config.SIMULATE)
 
     elif args.get:
