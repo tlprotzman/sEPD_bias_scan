@@ -151,7 +151,7 @@ def read_trim_voltage_file(file_name: str) -> dict:
     trim_voltages = {}
     # check if the file exists
     if not os.path.exists(file_name):
-        logging.error(f'Error: File {file_name} does not exist')
+        logging.critical(f'Error: File {file_name} does not exist')
         sys.exit(1)
     with open(file_name, 'r') as f:
         lines = f.readlines()
@@ -263,8 +263,18 @@ def set_trim_voltages(trim_map: dict, test=True) -> bool:
     south_cmd_list = []
     for ib in range(6):
         for i in range(32):
-            north_cmd_list.append('%s%01d%02d%02d\n\r' % (cmd_prefix, ib, i, trim_map['N'][ib][i]))
-            south_cmd_list.append('%s%01d%02d%02d\n\r' % (cmd_prefix, ib, i, trim_map['S'][ib][i]))
+            north_val = trim_map['N'][ib][i]
+            south_val = trim_map['S'][ib][i]
+
+            if abs(north_val) > 2500:
+                logging.error(f'Invalid trim voltage: Side=N, IB={ib}, I={i}, Voltage={north_val}.  0 will be used instead.')
+                north_val = 0
+            if abs(south_val) > 2500:
+                logging.error(f'Invalid trim voltage: Side=S, IB={ib}, I={i}, Voltage={south_val}.  0 will be used instead.')
+                south_val = 0
+            
+            north_cmd_list.append('%s%01d%02d%s\n\r' % (cmd_prefix, ib, i, str(north_val)))
+            south_cmd_list.append('%s%01d%02d%s\n\r' % (cmd_prefix, ib, i, str(south_val)))
     
     if test:
         logging.info('Generated command list')
