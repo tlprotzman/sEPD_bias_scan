@@ -9,3 +9,5 @@ TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 NORTH_IP = '10.20.34.98'
 SOUTH_IP = '10.20.34.99'
 PORT = 9760
+
+SIMULATE = True

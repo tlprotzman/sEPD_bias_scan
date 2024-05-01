@@ -109,7 +109,7 @@ def run_scans(voltages: list) -> dict:
         voltage = float(voltage)
         bias_map = generate_bias_map(voltage)
         load_bias_map(bias_map)
-        scan_info[voltage] = record_events(1000, test=True)
+        scan_info[voltage] = record_events(1000, test=config.SIMULATE)
 
     # Save scan info to JSON file
     with open(f'run_info/scan_info_{config.TIMESTAMP}.json', 'w') as f:
@@ -229,18 +229,21 @@ def get_trim_voltages(test=True) -> dict:
         trim_voltages[side] = {}
         for ib in range(6):
             trim_voltages[side][ib] = {}
-            for i in range(32):
-                # Send command to get the trim voltage
-                cmd = '%s%01d%02d\n\r' % (cmd_prefix, ib, i)
-                # Read the response
-                if test:
-                    response = 0
+            # Send command to get the trim voltage
+            cmd = '%s%01d\n\r' % (cmd_prefix, ib)
+            # Read the response
+            if test:
+                response = ' '.join(['0\n' for i in range(32)])
+            else:
+                if side == 'N':
+                    response = send_command(north_tn, cmd)
                 else:
-                    if side == 'N':
-                        response = send_command(north_tn, cmd)
-                    else:
-                        response = send_command(south_tn, cmd)
-                trim_voltages[side][ib][i] = response
+                    response = send_command(south_tn, cmd)
+            logging.debug(f'Response: {response}')
+            voltages = response.rstrip().lstrip().replace('\r', ' ').split('\n')
+            logging.debug(f'Voltages: {voltages}')
+            for i, voltage in enumerate(voltages):
+                trim_voltages[side][ib][i] = voltage
     return trim_voltages
 
 
@@ -300,9 +303,9 @@ def main(argv):
 
     # Add logging options
     parser.add_argument('--log', metavar='log_level', type=str, default='INFO', help='Set the logging level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
-    logging.basicConfig(level=getattr(logging, args.log))
 
     args = parser.parse_args()
+    logging.basicConfig(level=getattr(logging, args.log))
 
     # make all needed folders
     os.makedirs(config.BIAS_MAPS_FOLDER, exist_ok=True)
@@ -310,16 +313,16 @@ def main(argv):
 
     if args.scan:
         # Save current trim voltages
-        original_trim_voltages = get_trim_voltages(test=True)
+        original_trim_voltages = get_trim_voltages(test=config.SIMULATE)
         write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
         
         # Generate 0 trim map file
         generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
-        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), test=True)
+        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')), test=config.SIMULATE)
         run_scans(args.scan)
 
         # Restore original trim voltages
-        set_trim_voltages(original_trim_voltages, test=True)
+        set_trim_voltages(original_trim_voltages, test=config.SIMULATE)
 
     elif args.generate_demo:
         logging.info('Generating demo trim voltage file')
@@ -327,10 +330,10 @@ def main(argv):
 
     elif args.set:
         trim_voltages = read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_voltages.txt'))
-        set_trim_voltages(trim_voltages, test=True)
+        set_trim_voltages(trim_voltages, test=config.SIMULATE)
 
     elif args.get:
-        trim_voltages = get_trim_voltages(test=True)
+        trim_voltages = get_trim_voltages(test=config.SIMULATE)
         write_trim_voltage_file(args.get, trim_voltages)
 
 if __name__ == '__main__':
