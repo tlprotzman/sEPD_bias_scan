@@ -330,7 +330,7 @@ def main(argv):
         subprocess.run(['cp', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'), os.path.join(config.BIAS_MAPS_FOLDER, f'sEPD_HVSet_backup_{config.TIMESTAMP}.txt')])
         original_trim_voltages = get_trim_voltages()
         write_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, f'trim_voltages_{config.TIMESTAMP}.txt'), original_trim_voltages)
-        logging.info('Backup complete: timestamp {config.TIMESTAMP}')
+        logging.info(f'Backup complete: timestamp {config.TIMESTAMP}')
 
 
     # if args.scan:
@@ -352,6 +352,9 @@ def main(argv):
 
     elif args.set_base:
         # Set a bias voltage
+        if args.set_base < 0 or args.set_base > 60:
+            logging.error('Invalid base voltage.  Must be between 0 and 60')
+            sys.exit(1)
         base_voltage = args.set_base
         bias_map = generate_bias_map(base_voltage)
         load_bias_map(bias_map)
