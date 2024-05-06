@@ -1,0 +1,7 @@
+BiasControl/
+bias_maps/
+.vscode/
+__pycache__/
+patterns/
+run_info/
+small_patterns/
