@@ -12,13 +12,14 @@ import logging
 
 import config
 
-def generate_bias_map(voltage: float) -> str:
+def generate_bias_map(voltages: list) -> str:
     '''
     Generates the bias map for a particular voltage.
     Returns the file name of the bias map.
 
     Parameters:
-        voltage: float - The voltage to generate the bias map for.
+        voltage: list - The list of voltage to generate the bias map
+                        for.  The list should be 6 elements long.
 
     Returns:
         str - The file name of the bias map.
@@ -26,10 +27,10 @@ def generate_bias_map(voltage: float) -> str:
     lines = []
     with open('sEPD_HVSet_template.txt', 'r') as f:
         lines = f.readlines()
-    file_name = os.path.join(config.BIAS_MAPS_FOLDER, f'sEPD_HVSet_{voltage}.txt')
+    file_name = os.path.join(config.BIAS_MAPS_FOLDER, f'sEPD_HVSet_{config.TIMESTAMP}.txt')
     with open(file_name, 'w') as f:
-        for line in lines:
-            f.write(line.format(voltage))
+        for i, line in enumerate(lines):
+            f.write(line.format(voltages[i]))
     return file_name
 
 def load_bias_map(file_name: str) -> None:
@@ -45,9 +46,10 @@ def load_bias_map(file_name: str) -> None:
     # move the file to the bias control folder
     os.rename(file_name, os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt'))
     # load the bias map
-    subprocess.run(['bash', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_Init.sh')])
+    # subprocess.run(['bash', os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_Init.sh')])
     # Wait for bias supply to stabilize
-    time.sleep(1)
+    # time.sleep(1)
+    print(f'Bias map loaded to {os.path.join(config.BIAS_CONTROL_FOLDER, 'sEPD_HVSet.txt')}.  Run sEPD_init.sh to load the bias map.')
 
 def record_events(n_events: int, ) -> dict:
     '''
@@ -141,7 +143,7 @@ def send_command(tn: telnetlib.Telnet, command: str) -> str:
     logging.debug(f'Response: {response}')
     return response
 
-def read_trim_voltage_file(file_name: str) -> dict:
+def read_trim_voltage_file(file_name: str) -> tuple:
     '''
     Read the trim voltage file and return the contents as a dictionary.
 
@@ -152,6 +154,7 @@ def read_trim_voltage_file(file_name: str) -> dict:
         dict - The contents of the trim voltage file.
     '''
     trim_voltages = {}
+    board_voltages = {}
     # check if the file exists
     if not os.path.exists(file_name):
         logging.critical(f'Error: File {file_name} does not exist')
@@ -172,7 +175,12 @@ def read_trim_voltage_file(file_name: str) -> dict:
             if i not in trim_voltages[side][ib]:
                 trim_voltages[side][ib][i] = v
             elif line_info[0] == 'BOARD':
-                continue
+                _, side, ib, v = line_info
+                ib = int(ib)
+                v = int(v)
+                if side not in board_voltages:
+                    board_voltages[side] = {}
+                board_voltages[side][ib] = v
     # Check that all channels are present
     success = True
     for side in ['N', 'S']:
@@ -181,13 +189,23 @@ def read_trim_voltage_file(file_name: str) -> dict:
                 if i not in trim_voltages[side][ib]:
                     logging.error(f'Missing channel: Side={side}, IB={ib}, I={i}')
                     success = False
+
+    voltages = []
+    for side in ['N', 'S']:
+        for ib in range (6):
+            if ib not in board_voltages[side]:
+                logging.error(f'Missing board voltage: Side={side}, IB={ib}')
+                success = False
+            else:
+                voltages.append(board_voltages[side][ib])
+
     if not success:
         logging.error('Trim voltage file is invalid.  Exiting.')
         sys.exit(1)
     
-    return trim_voltages
+    return (trim_voltages, voltages)
 
-def write_trim_voltage_file(file_name: str, trim_voltages: dict) -> None:
+def write_trim_voltage_file(file_name: str, trim_voltages: dict, biases: dict) -> None:
     '''
     Write the trim voltages to a file.
 
@@ -203,11 +221,12 @@ def write_trim_voltage_file(file_name: str, trim_voltages: dict) -> None:
         f.write('Side IB I Voltage\n')
         for side in ['N', 'S']:
             for ib in trim_voltages[side]:
+                f.write(f'BOARD {side} {ib} {biases[side][ib]}\n')
                 for i in trim_voltages[side][ib]:
                     v = trim_voltages[side][ib][i]
                     f.write(f'CHANNEL {side} {ib} {i} {v}\n')
 
-def generate_empty_trim_file(file_name: str) -> None:
+def generate_empty_trim_file(base_voltage: float, file_name: str) -> None:
     '''
     Generate an empty trim voltage file.
 
@@ -218,13 +237,16 @@ def generate_empty_trim_file(file_name: str) -> None:
         None
     '''
     trim_voltages = {}
+    bias_voltages = {}
     for side in ['N', 'S']:
         trim_voltages[side] = {}
+        bias_voltages[side] = {}
         for ib in range(6):
             trim_voltages[side][ib] = {}
+            bias_voltages[side][ib] = base_voltage
             for i in range(64):
                 trim_voltages[side][ib][i] = 0
-    write_trim_voltage_file(file_name, trim_voltages)
+    write_trim_voltage_file(file_name, trim_voltages, bias_voltages)
 
 def get_trim_voltages() -> dict:
     ''' 
@@ -372,16 +394,19 @@ def main(argv):
             logging.error('Invalid base voltage.  Must be between 0 and 60')
             sys.exit(1)
         base_voltage = args.set_base
-        bias_map = generate_bias_map(base_voltage)
-        load_bias_map(bias_map)
 
         # Set the trim voltages to 0
-        generate_empty_trim_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
-        set_trim_voltages(read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt')))
+        generate_empty_trim_file(base_voltage, os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
+        trim_voltages, board_voltages = read_trim_voltage_file(os.path.join(config.BIAS_MAPS_FOLDER, 'trim_zero.txt'))
+        set_trim_voltages(trim_voltages)
+        bias_map = generate_bias_map(board_voltages)
+        load_bias_map(bias_map)
 
     elif args.set:
-        trim_voltages = read_trim_voltage_file(args.set)
+        trim_voltages, board_voltages = read_trim_voltage_file(args.set)
         set_trim_voltages(trim_voltages)
+        bias_map = generate_bias_map(board_voltages)
+        load_bias_map(bias_map)
 
     elif args.get:
         trim_voltages = get_trim_voltages()
