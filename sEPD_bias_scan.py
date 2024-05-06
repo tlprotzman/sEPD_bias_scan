@@ -159,16 +159,32 @@ def read_trim_voltage_file(file_name: str) -> dict:
     with open(file_name, 'r') as f:
         lines = f.readlines()
     for line in lines[1:]: # skip the header
-        side, ib, i, v = line.split()
-        ib = int(ib)
-        i = int(i)
-        v = int(v)
-        if side not in trim_voltages:
-            trim_voltages[side] = {}
-        if ib not in trim_voltages[side]:
-            trim_voltages[side][ib] = {}
-        if i not in trim_voltages[side][ib]:
-            trim_voltages[side][ib][i] = v
+        line_info = line.split()
+        if line_info[0] == 'CHANNEL':
+            _, side, ib, i, v = line_info
+            ib = int(ib)
+            i = int(i)
+            v = int(v)
+            if side not in trim_voltages:
+                trim_voltages[side] = {}
+            if ib not in trim_voltages[side]:
+                trim_voltages[side][ib] = {}
+            if i not in trim_voltages[side][ib]:
+                trim_voltages[side][ib][i] = v
+            elif line_info[0] == 'BOARD':
+                continue
+    # Check that all channels are present
+    success = True
+    for side in ['N', 'S']:
+        for ib in range(6):
+            for i in range(64):
+                if i not in trim_voltages[side][ib]:
+                    logging.error(f'Missing channel: Side={side}, IB={ib}, I={i}')
+                    success = False
+    if not success:
+        logging.error('Trim voltage file is invalid.  Exiting.')
+        sys.exit(1)
+    
     return trim_voltages
 
 def write_trim_voltage_file(file_name: str, trim_voltages: dict) -> None:
@@ -189,7 +205,7 @@ def write_trim_voltage_file(file_name: str, trim_voltages: dict) -> None:
             for ib in trim_voltages[side]:
                 for i in trim_voltages[side][ib]:
                     v = trim_voltages[side][ib][i]
-                    f.write(f'{side} {ib} {i} {v}\n')
+                    f.write(f'CHANNEL {side} {ib} {i} {v}\n')
 
 def generate_empty_trim_file(file_name: str) -> None:
     '''
